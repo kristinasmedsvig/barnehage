@@ -1,0 +1,42 @@
+name: Sjekk ledige barnehageplasser
+
+on:
+  schedule:
+    - cron: "0 6 * * *"     # 06:00 UTC daglig (~07–08 norsk tid)
+  workflow_dispatch:          # lar deg kjøre manuelt fra Actions-fanen
+
+permissions:
+  contents: write             # trengs for å lagre tilstanden tilbake i repoet
+
+jobs:
+  sjekk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer avhengigheter
+        run: pip install -r requirements.txt
+
+      - name: Kjør sjekk
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python check_barnehage.py
+
+      - name: Lagre tilstand
+        run: |
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git config user.name "barnehage-agent"
+            git config user.email "actions@users.noreply.github.com"
+            git add state/
+            git commit -m "Oppdater tilstand $(date -u +%F)"
+            git push
+          else
+            echo "Ingen endring i tilstand."
+          fi
